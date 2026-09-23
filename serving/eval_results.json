@@ -1,0 +1,9 @@
+{
+  "bi-encoder (served)": {
+    "recall@10": 0.0734,
+    "recall@50": 0.3091,
+    "ndcg@10": 0.7362,
+    "mrr": 0.885
+  },
+  "n_test_jds": 360
+}

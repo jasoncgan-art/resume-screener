@@ -1,0 +1,35 @@
+{
+  "config": {
+    "sequential": 50,
+    "concurrent": 20,
+    "k": 10,
+    "workers": 1,
+    "host": "127.0.0.1",
+    "server": "uvicorn@127.0.0.1:8124"
+  },
+  "sequential_latency_ms": {
+    "n": 50,
+    "mean": 31.67,
+    "p50": 29.86,
+    "p95": 42.65,
+    "p99": 57.31,
+    "min": 27.14,
+    "max": 68.32
+  },
+  "concurrent_latency_ms": {
+    "n": 20,
+    "mean": 512.27,
+    "p50": 537.19,
+    "p95": 568.74,
+    "p99": 576.29,
+    "throughput_req_per_s": 33.6
+  },
+  "server_metrics_after_run": {
+    "uptime_s": 3.298870801925659,
+    "health_requests": 2,
+    "screen_requests": 75,
+    "screen_errors": 0,
+    "screen_mean_latency_ms": 1.6051255866962795
+  },
+  "note": "localhost smoke test on CPU; latency dominated by the job-tower forward pass + exact top-k over 3,000 resumes."
+}
