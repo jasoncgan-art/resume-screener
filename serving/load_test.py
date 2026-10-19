@@ -1,143 +1,107 @@
-"""Latency/load smoke test for the serving API.
-
-Starts `uvicorn serving.app:app` as a subprocess against the repo's artifacts,
-fires 50 sequential requests (warm-up included) and then 20 concurrent
-requests, and reports mean / p50 / p95 / p99 latency plus throughput.
-
-Usage:  python serving/load_test.py [--sequential 50] [--concurrent 20]
-                                     [--out serving/load_results.json]
-"""
-
-from __future__ import annotations
-
+"""Repeatable local closed-loop benchmark with connection reuse and excluded warmup."""
 import argparse
-import concurrent.futures
+import asyncio
 import json
 import os
-import statistics
+from pathlib import Path
+import platform
 import subprocess
 import sys
+import tempfile
 import time
 
 import httpx
+import numpy as np
 
-SERVING_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_DIR = os.path.normpath(os.path.join(SERVING_DIR, ".."))
-
-# test-split JD ids, deterministic (every 12th of the sorted test ids)
-with open(os.path.join(REPO_DIR, "data", "split.json"), encoding="utf-8") as f:
-    _test_ids = json.load(f)["test_job_ids"]
-JOB_IDS = _test_ids[::12][:10]
-assert len(JOB_IDS) == 10, "expected 10 probe job ids"
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def wait_for_health(base: str, timeout_s: float = 60.0):
-    # trust_env=False: ignore the sandbox's egress-proxy env vars for localhost.
-    t0 = time.time()
-    while time.time() - t0 < timeout_s:
-        try:
-            r = httpx.get(base + "/health", timeout=5, trust_env=False)
-            if r.status_code == 200:
-                return
-        except Exception:
-            pass
-        time.sleep(0.5)
-    raise RuntimeError("server did not become healthy in time")
-
-
-def one_request(base: str, jid: int, k: int = 10) -> float:
-    t0 = time.perf_counter()
-    with httpx.Client(base_url=base, timeout=30, trust_env=False) as c:
-        r = c.post("/screen", json={"job_id": jid, "k": k})
-        r.raise_for_status()
-        assert len(r.json()["items"]) == k
-    return (time.perf_counter() - t0) * 1000
-
-
-def percentile(xs, p):
-    xs = sorted(xs)
-    if not xs:
-        return None
-    k = (len(xs) - 1) * p / 100
-    f = int(k)
-    return xs[f] + (xs[f + 1] - xs[f]) * (k - f) if f + 1 < len(xs) else xs[f]
+async def measure(base, job_ids, concurrency, requests, warmup, mode):
+    limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
+    async with httpx.AsyncClient(base_url=base, timeout=30, limits=limits, trust_env=False) as client:
+        async def send(index):
+            start = time.perf_counter()
+            try:
+                response = await client.post('/screen', json={'job_id': job_ids[index % len(job_ids)], 'k': 10, 'mode': mode})
+                response.raise_for_status()
+                if len(response.json()['items']) != 10:
+                    raise ValueError('wrong response size')
+                return (time.perf_counter() - start) * 1000, None
+            except Exception as error:
+                return (time.perf_counter() - start) * 1000, type(error).__name__
+        for index in range(warmup):
+            _, error = await send(index)
+            if error:
+                raise RuntimeError(f'warmup failed: {error}')
+        # Fixed workers keep issuing requests. Latency starts on dispatch and
+        # excludes time waiting in a client task queue (closed-loop semantics).
+        async def worker(worker_id):
+            return [await send(index) for index in range(worker_id, requests, concurrency)]
+        start = time.perf_counter()
+        chunks = await asyncio.gather(*(worker(i) for i in range(concurrency)))
+        elapsed = time.perf_counter() - start
+        observations = [item for chunk in chunks for item in chunk]
+        latency = [ms for ms, error in observations if error is None]
+        errors = [error for _, error in observations if error is not None]
+        return {'concurrency': concurrency, 'requests': requests, 'successes': len(latency),
+                'errors': len(errors), 'error_types': sorted(set(errors)), 'elapsed_s': elapsed,
+                'successful_requests_per_second': len(latency) / elapsed,
+                'latency_ms_successful': {f'p{p}': float(np.percentile(latency, p)) if latency else None
+                                          for p in [50, 95, 99]}}
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--sequential", type=int, default=50)
-    ap.add_argument("--concurrent", type=int, default=20)
-    ap.add_argument("--port", type=int, default=8124)
-    ap.add_argument("--out", default=os.path.join(SERVING_DIR, "load_results.json"))
-    args = ap.parse_args()
-
-    env = dict(os.environ)
-    env["PYTHONPATH"] = REPO_DIR + os.pathsep + env.get("PYTHONPATH", "")
-    server_log = os.path.join(SERVING_DIR, "server.log")
-    log_fh = open(server_log, "w", encoding="utf-8")
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "serving.app:app",
-         "--host", "127.0.0.1", "--port", str(args.port), "--workers", "1"],
-        cwd=REPO_DIR, env=env,
-        stdout=log_fh, stderr=subprocess.STDOUT,
-    )
-    base = f"http://127.0.0.1:{args.port}"
-    try:
-        wait_for_health(base)
-        health = httpx.get(base + "/health", timeout=10, trust_env=False).json()
-        print(f"[load_test] server up: {health['n_resumes']} resumes, "
-              f"{health['n_jobs']} jobs")
-
-        for i in range(5):
-            one_request(base, JOB_IDS[i % len(JOB_IDS)])
-
-        seq_lat = [one_request(base, JOB_IDS[i % len(JOB_IDS)])
-                   for i in range(args.sequential)]
-        print(f"[load_test] {args.sequential} sequential done")
-
-        t0 = time.time()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrent) as ex:
-            futs = [ex.submit(one_request, base, JOB_IDS[i % len(JOB_IDS)])
-                    for i in range(args.concurrent)]
-            conc_lat = [f.result() for f in futs]
-        wall_s = time.time() - t0
-        print(f"[load_test] {args.concurrent} concurrent done")
-
-        metrics = httpx.get(base + "/metrics", timeout=10, trust_env=False).json()
-        result = {
-            "config": {"sequential": args.sequential, "concurrent": args.concurrent,
-                       "k": 10, "workers": 1, "host": "127.0.0.1",
-                       "server": f"uvicorn@127.0.0.1:{args.port}"},
-            "sequential_latency_ms": {
-                "n": len(seq_lat), "mean": round(statistics.mean(seq_lat), 2),
-                "p50": round(percentile(seq_lat, 50), 2),
-                "p95": round(percentile(seq_lat, 95), 2),
-                "p99": round(percentile(seq_lat, 99), 2),
-                "min": round(min(seq_lat), 2), "max": round(max(seq_lat), 2),
-            },
-            "concurrent_latency_ms": {
-                "n": len(conc_lat), "mean": round(statistics.mean(conc_lat), 2),
-                "p50": round(percentile(conc_lat, 50), 2),
-                "p95": round(percentile(conc_lat, 95), 2),
-                "p99": round(percentile(conc_lat, 99), 2),
-                "throughput_req_per_s": round(args.concurrent / wall_s, 1),
-            },
-            "server_metrics_after_run": metrics,
-            "note": "localhost smoke test on CPU; latency dominated by the "
-                    "job-tower forward pass + exact top-k over 3,000 resumes.",
-        }
-        with open(args.out, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2)
-        print(json.dumps(result, indent=2))
-        print(f"[load_test] wrote {args.out}")
-    finally:
-        proc.terminate()
-        proc.wait(timeout=15)
-        log_fh.close()
-        if proc.returncode not in (0, -15):
-            print(f"[load_test] server exited with code {proc.returncode}; "
-                  f"see {server_log}")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--requests', type=int, default=200)
+    parser.add_argument('--warmup', type=int, default=20)
+    parser.add_argument('--concurrency', type=int, nargs='+', default=[1, 8, 20])
+    parser.add_argument('--mode', choices=['bm25', 'neural', 'hybrid'], default='hybrid')
+    parser.add_argument('--port', type=int, default=8124)
+    parser.add_argument('--out', type=Path, default=ROOT / 'reports/load_results.json')
+    args = parser.parse_args()
+    if args.requests < 1 or args.warmup < 0 or any(c < 1 or c > args.requests for c in args.concurrency):
+        parser.error('positive request counts and concurrency <= requests required')
+    job_ids = json.loads((ROOT / 'data/split.json').read_text())['test_job_ids'][::12][:10]
+    base = f'http://127.0.0.1:{args.port}'
+    with tempfile.TemporaryFile(mode='w+') as log:
+        proc = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'serving.app:app',
+                                 '--host', '127.0.0.1', '--port', str(args.port), '--workers', '1'],
+                                cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            with httpx.Client(timeout=2, trust_env=False) as client:
+                deadline = time.monotonic() + 45
+                while True:
+                    if proc.poll() is not None:
+                        log.seek(0)
+                        raise RuntimeError(log.read())
+                    try:
+                        if client.get(base + '/health').status_code == 200:
+                            break
+                    except httpx.HTTPError:
+                        pass
+                    if time.monotonic() > deadline:
+                        raise TimeoutError('server startup exceeded 45 seconds')
+                    time.sleep(0.2)
+            results = [asyncio.run(measure(base, job_ids, c, args.requests, args.warmup, args.mode))
+                       for c in args.concurrency]
+            report = {'mode': args.mode, 'workers': 1, 'warmup_excluded_per_scenario': args.warmup,
+                      'method': 'closed-loop local HTTP, reused connections, dispatch-to-response latency',
+                      'python': platform.python_version(), 'platform': platform.platform(),
+                      'logical_cpus_visible': os.cpu_count(), 'results': results,
+                      'limitations': ['Client and server share a host; not a production capacity estimate.',
+                                      'Fixed request count, not a long-running soak test.',
+                                      'No cross-version speedup claim; old test created a client per request.']}
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(json.dumps(report, indent=2) + '\n')
+            print(json.dumps(report, indent=2))
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

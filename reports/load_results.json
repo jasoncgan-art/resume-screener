@@ -1,0 +1,58 @@
+{
+  "mode": "hybrid",
+  "workers": 1,
+  "warmup_excluded_per_scenario": 20,
+  "method": "closed-loop local HTTP, reused connections, dispatch-to-response latency",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "logical_cpus_visible": 9,
+  "results": [
+    {
+      "concurrency": 1,
+      "requests": 200,
+      "successes": 200,
+      "errors": 0,
+      "error_types": [],
+      "elapsed_s": 3.4497293360000185,
+      "successful_requests_per_second": 57.975562868912256,
+      "latency_ms_successful": {
+        "p50": 17.162657499994793,
+        "p95": 21.313743649989192,
+        "p99": 23.67502786999779
+      }
+    },
+    {
+      "concurrency": 8,
+      "requests": 200,
+      "successes": 200,
+      "errors": 0,
+      "error_types": [],
+      "elapsed_s": 3.100775000999988,
+      "successful_requests_per_second": 64.50000401044925,
+      "latency_ms_successful": {
+        "p50": 122.5361480000089,
+        "p95": 185.870431099984,
+        "p99": 206.04020854000015
+      }
+    },
+    {
+      "concurrency": 20,
+      "requests": 200,
+      "successes": 200,
+      "errors": 0,
+      "error_types": [],
+      "elapsed_s": 3.216211744999981,
+      "successful_requests_per_second": 62.18496039973922,
+      "latency_ms_successful": {
+        "p50": 309.58441299999606,
+        "p95": 538.0142534999937,
+        "p99": 601.9920489599872
+      }
+    }
+  ],
+  "limitations": [
+    "Client and server share a host; not a production capacity estimate.",
+    "Fixed request count, not a long-running soak test.",
+    "No cross-version speedup claim; old test created a client per request."
+  ]
+}

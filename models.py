@@ -61,6 +61,10 @@ class TextTower(nn.Module):
         mask = (token_ids != 0)                                # (B, L) bool
         e = self.emb(token_ids)                               # (B, L, E)
         scores = self.attn(e).squeeze(-1)                     # (B, L)
+        if token_ids.ndim != 2 or token_ids.shape[1] == 0:
+            raise ValueError("token sequences must have positive width")
+        if (~mask.any(dim=1)).any():
+            raise ValueError("empty/all-padding text cannot be encoded")
         scores = scores.masked_fill(~mask, float("-inf"))
         alpha = torch.softmax(scores, dim=1).unsqueeze(-1)    # (B, L, 1)
         pooled = (e * alpha).sum(dim=1)                       # (B, E)
@@ -110,3 +114,4 @@ class BiEncoder(nn.Module):
     @torch.no_grad()
     def encode_resumes(self, resume_ids: torch.Tensor) -> torch.Tensor:
         return self.resume_tower(resume_ids)
+

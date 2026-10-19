@@ -10,5 +10,6 @@ PY=".venv/bin/python"
 $PY data_gen.py
 $PY dataset.py
 $PY train.py
-$PY evaluate.py
+$PY hybrid.py
 $PY screen.py --job_id "$($PY -c "import json; print(json.load(open('data/split.json'))['test_job_ids'][0])")" --top_n 10
+

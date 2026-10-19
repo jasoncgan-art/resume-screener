@@ -1,0 +1,86 @@
+{
+  "data_type": "synthetic",
+  "ats_comparison": "not performed",
+  "split_counts": {
+    "train": 1152,
+    "validation": 288,
+    "test": 360
+  },
+  "config": {
+    "schema_version": 1,
+    "neural_weight": 0.5,
+    "rank_constant": 60,
+    "selection_metric": "validation NDCG@10",
+    "seed": 42,
+    "artifact_sha256": "e0bc51591cf19215226e97be1565bdca956bbc10e0dd5be6f7e54ae09a7def00"
+  },
+  "training_epochs": 40,
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1+cpu",
+    "numpy": "2.3.5",
+    "threads": 2
+  },
+  "validation": [
+    {
+      "neural_weight": 0.0,
+      "recall@10": 0.07951443413166988,
+      "recall@50": 0.3270865679455952,
+      "ndcg@10": 0.7790327961112901,
+      "mrr": 0.9239004629629631
+    },
+    {
+      "neural_weight": 0.25,
+      "recall@10": 0.08549684747089131,
+      "recall@50": 0.3457753145438548,
+      "ndcg@10": 0.8282749566163442,
+      "mrr": 0.9366319444444444
+    },
+    {
+      "neural_weight": 0.5,
+      "recall@10": 0.08628044393138021,
+      "recall@50": 0.35918789323066513,
+      "ndcg@10": 0.8343297057281942,
+      "mrr": 0.9444707491582491
+    },
+    {
+      "neural_weight": 0.75,
+      "recall@10": 0.07920949251080453,
+      "recall@50": 0.3296074775842727,
+      "ndcg@10": 0.7906659572698485,
+      "mrr": 0.9389245014245012
+    },
+    {
+      "neural_weight": 1.0,
+      "recall@10": 0.07226403928031382,
+      "recall@50": 0.30277149327074987,
+      "ndcg@10": 0.7169096681802815,
+      "mrr": 0.8612268518518518
+    }
+  ],
+  "test": {
+    "bm25": {
+      "recall@10": 0.08203967203321788,
+      "recall@50": 0.32984905575765805,
+      "ndcg@10": 0.8033684763575849,
+      "mrr": 0.9329166666666667
+    },
+    "neural": {
+      "recall@10": 0.0733590452908177,
+      "recall@50": 0.30726663084035755,
+      "ndcg@10": 0.7242199960052763,
+      "mrr": 0.8603703703703705
+    },
+    "selected_fusion": {
+      "recall@10": 0.08834581406836639,
+      "recall@50": 0.36194790053977655,
+      "ndcg@10": 0.8548392383886254,
+      "mrr": 0.9521759259259258
+    }
+  },
+  "limitations": [
+    "Template-generated queries share a fixed synthetic candidate corpus.",
+    "One seed; no evidence of generalization to real resumes or ATS superiority.",
+    "Existing test set has been inspected historically; use a fresh company holdout."
+  ]
+}

@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -40,6 +41,7 @@ _lock = threading.Lock()
 
 
 class ScreenRequest(BaseModel):
+    mode: Literal["neural", "bm25", "hybrid"] = "neural"
     job_id: int | None = Field(
         default=None, ge=0,
         description="Corpus JD id to screen for (mutually exclusive with job_text)",
@@ -135,12 +137,17 @@ def screen(req: ScreenRequest):
                 detail="provide exactly one of job_id or job_text",
             )
         try:
-            qvec = (screener.job_vector_by_id(req.job_id)
-                    if req.job_id is not None
-                    else screener.job_vector(req.job_text))
-        except (KeyError, ValueError) as e:
+            if req.job_id is not None:
+                if req.job_id >= len(screener.data["jobs"]):
+                    raise KeyError(req.job_id)
+                text = screener.data["jobs"][req.job_id]["text"]
+            else:
+                text = req.job_text
+            results = screener.screen_text(text, k, mode=req.mode)
+        except KeyError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        results = screener.screen(qvec, k)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
     except HTTPException:
         with _lock:
             _counters["screen_errors"] += 1
@@ -155,3 +162,4 @@ def screen(req: ScreenRequest):
         items.append(ScreenItem(rank=rank, candidate_id=r["candidate_id"],
                                 title=r["title"], score=s))
     return ScreenResponse(k=k, items=items, latency_ms=latency_ms)
+

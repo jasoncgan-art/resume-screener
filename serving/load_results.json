@@ -31,5 +31,6 @@
     "screen_errors": 0,
     "screen_mean_latency_ms": 1.6051255866962795
   },
-  "note": "localhost smoke test on CPU; latency dominated by the job-tower forward pass + exact top-k over 3,000 resumes."
+  "note": "localhost smoke test on CPU; latency dominated by the job-tower forward pass + exact top-k over 3,000 resumes.",
+  "status": "legacy pre-validation benchmark; use reports/ for current measurements"
 }

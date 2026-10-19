@@ -1,16 +1,9 @@
-"""Tokenize the synthetic corpus and build train-ready tensors.
+"""Build train/validation/test query partitions and model tensors.
 
-* Vocabulary: lowercase `[a-z]+` tokens from the TRAIN texts only
-  (JDs + resumes), min_df=2, capped at MAX_VOCAB. Two special tokens:
-  <pad>=0, <unk>=1. Test JDs may contain OOV tokens -> <unk>; this is
-  honest (no test leakage into the vocabulary).
-* Every JD/resume -> padded token-id sequence (bag order preserved as a
-  sequence; the model mean-pools, so order barely matters).
-* Train pairs: for each train JD, one positive resume sampled from the same
-  family (seeded). In-batch sampled softmax supplies the negatives at train
-  time; known same-family non-positives are masked as false negatives.
-* Saves artifacts/dataset.pt with everything train.py / evaluate.py /
-  serving need. Deterministic given data/ (fixed seeds throughout).
+Resumes are a fixed candidate corpus; only training JD texts and corpus texts
+build the vocabulary. Frequency ties use lexical order for process-independent
+IDs. Validation selects fusion weight, while test labels are reserved for reporting.
+Training uses ListNet lists in train.py; legacy train_pairs remain for compatibility.
 """
 
 from __future__ import annotations
@@ -19,7 +12,7 @@ import json
 import os
 import random
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 import numpy as np
 import torch
@@ -49,7 +42,8 @@ def build_vocab(texts: list[str]) -> dict[str, int]:
     df = Counter()
     for t in texts:
         df.update(set(tokenize(t)))
-    kept = [tok for tok, c in df.most_common(MAX_VOCAB) if c >= MIN_DF]
+    kept = [tok for tok, c in sorted(df.items(), key=lambda pair: (-pair[1], pair[0]))
+            if c >= MIN_DF][:MAX_VOCAB]
     vocab = {"<pad>": 0, "<unk>": 1}
     for tok in kept:
         vocab[tok] = len(vocab)
@@ -63,7 +57,7 @@ def encode(text: str, vocab: dict[str, int]) -> list[int]:
 def pad_batch(seqs: list[list[int]]) -> torch.Tensor:
     if not seqs:
         return torch.zeros((0, MAX_LEN), dtype=torch.long)
-    width = max(len(s) for s in seqs)
+    width = max(1, max(len(s) for s in seqs))
     out = torch.zeros((len(seqs), width), dtype=torch.long)
     for i, s in enumerate(seqs):
         out[i, : len(s)] = torch.tensor(s, dtype=torch.long)
@@ -85,7 +79,27 @@ def build_dataset(seed: int = SEED) -> dict:
     jobs, resumes, split = load_corpus()
     job_by_id = {j["job_id"]: j for j in jobs}
 
-    train_jobs = [job_by_id[i] for i in split["train_job_ids"]]
+    # Preserve the original test IDs. Reserve 20% of the OLD training jobs
+    # per family for validation; no model selection uses test relevance.
+    validation_ids = split.get("validation_job_ids")
+    train_ids = list(split["train_job_ids"])
+    if validation_ids is None:
+        families = defaultdict(list)
+        for jid in train_ids:
+            families[job_by_id[jid]["family"]].append(jid)
+        validation_ids, train_ids = [], []
+        split_rng = random.Random(seed + 1)
+        for family in sorted(families):
+            ids = sorted(families[family])
+            split_rng.shuffle(ids)
+            count = max(1, len(ids) // 5) if len(ids) > 1 else 0
+            validation_ids.extend(ids[:count])
+            train_ids.extend(ids[count:])
+    train_ids, validation_ids = sorted(train_ids), sorted(validation_ids)
+    partitions = [set(train_ids), set(validation_ids), set(split["test_job_ids"])]
+    if any(partitions[i] & partitions[j] for i in range(3) for j in range(i)):
+        raise ValueError("train/validation/test job IDs overlap")
+    train_jobs = [job_by_id[i] for i in train_ids]
     test_jobs = [job_by_id[i] for i in split["test_job_ids"]]
 
     # vocab from TRAIN texts only (no test leakage)
@@ -112,10 +126,10 @@ def build_dataset(seed: int = SEED) -> dict:
     # canonical skill vocabulary + multi-hot targets for the auxiliary loss
     # (train.py). These labels are derived from the same text the model sees;
     # they are never used at inference time.
-    skill_list = sorted({x for j in jobs for x in j["req_skills"]}
+    skill_list = sorted({x for j in train_jobs for x in j["req_skills"]}
                         | {x for r in resumes for x in r["skills"]})
     skill_to_idx = {s: i for i, s in enumerate(skill_list)}
-    job_skill_targets = [[skill_to_idx[x] for x in j["req_skills"]]
+    job_skill_targets = [[skill_to_idx[x] for x in j["req_skills"] if x in skill_to_idx]
                          for j in jobs]
     resume_skill_targets = [[skill_to_idx[x] for x in r["skills"]]
                             for r in resumes]
@@ -125,7 +139,8 @@ def build_dataset(seed: int = SEED) -> dict:
         "vocab_size": len(vocab),
         "jobs": jobs,               # full list, index == position
         "resumes": resumes,         # full list, index == position
-        "train_job_ids": split["train_job_ids"],
+        "train_job_ids": train_ids,
+        "validation_job_ids": validation_ids,
         "test_job_ids": split["test_job_ids"],
         "train_pairs": train_pairs,  # [(job_id, resume_idx)]
         "resume_family": fam_of_resume,
@@ -163,3 +178,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

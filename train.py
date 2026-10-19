@@ -160,6 +160,8 @@ def train(data: dict, epochs: int = CONFIG["epochs"],
     otherwise (e.g. smoke tests) the trained model is just returned."""
     if aux_weight is None:
         aux_weight = CONFIG["aux_weight"]
+    if epochs < 1 or batch_size < 1:
+        raise ValueError("epochs and batch_size must be positive")
     set_seed(seed)
     rank_lists = build_rank_lists(data, seed)
     jobs, resumes = data["jobs"], data["resumes"]
@@ -221,9 +223,11 @@ def train(data: dict, epochs: int = CONFIG["epochs"],
                   flush=True)
 
     if path is not None:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         torch.save({"state_dict": model.state_dict(),
-                    "n_skills": data["n_skills"], **CONFIG}, path)
+                    "n_skills": data["n_skills"], **CONFIG,
+                    "epochs": epochs, "batch_size": batch_size,
+                    "seed": seed, "aux_weight": aux_weight}, path)
         print(f"[train] saved {path}")
     return model
 
@@ -231,11 +235,15 @@ def train(data: dict, epochs: int = CONFIG["epochs"],
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=CONFIG["epochs"])
+    ap.add_argument("--threads", type=int, default=2)
     args = ap.parse_args()
+    torch.set_num_threads(args.threads)
     data = build_dataset()
+    save_dataset(data)
     train(data, epochs=args.epochs,
           path=os.path.join(ART_DIR, "biencoder.pt"))
 
 
 if __name__ == "__main__":
     main()
+

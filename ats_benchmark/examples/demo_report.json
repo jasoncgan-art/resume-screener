@@ -1,0 +1,163 @@
+{
+  "baseline": "synthetic_baseline",
+  "k": 5,
+  "seed": 42,
+  "bootstrap_draws": 2000,
+  "n_jobs": 8,
+  "metrics": {
+    "synthetic_baseline": {
+      "ndcg": 0.49397656844608934,
+      "precision": 0.55,
+      "recall_within_judged_pool": 0.3047619047619048
+    },
+    "synthetic_challenger": {
+      "ndcg": 0.49315338562294925,
+      "precision": 0.575,
+      "recall_within_judged_pool": 0.3231150793650793
+    }
+  },
+  "comparisons": {
+    "synthetic_challenger": {
+      "mean_ndcg_delta": -0.0008231828231400895,
+      "paired_job_bootstrap_95_ci": [
+        -0.1410066767272071,
+        0.15436710140648355
+      ],
+      "eligible_jobs": 8,
+      "jobs_improved": 3,
+      "jobs_worsened": 5,
+      "interpretation": "no clear positive NDCG difference established"
+    }
+  },
+  "per_job": {
+    "synthetic_baseline": {
+      "synthetic-job-04": {
+        "ndcg": 0.41786852909121563,
+        "precision": 0.4,
+        "recall_within_judged_pool": 0.2222222222222222,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-05": {
+        "ndcg": 0.14918651635296146,
+        "precision": 0.2,
+        "recall_within_judged_pool": 0.14285714285714285,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-06": {
+        "ndcg": 0.3718791999848038,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.25,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-07": {
+        "ndcg": 0.5596547982920071,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.42857142857142855,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-08": {
+        "ndcg": 0.5289207083486064,
+        "precision": 0.8,
+        "recall_within_judged_pool": 0.4444444444444444,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-09": {
+        "ndcg": 0.528197866566201,
+        "precision": 0.4,
+        "recall_within_judged_pool": 0.25,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-10": {
+        "ndcg": 0.5656850315697273,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.3,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-11": {
+        "ndcg": 0.830419897363192,
+        "precision": 0.8,
+        "recall_within_judged_pool": 0.4,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      }
+    },
+    "synthetic_challenger": {
+      "synthetic-job-04": {
+        "ndcg": 0.5587673329568479,
+        "precision": 0.4,
+        "recall_within_judged_pool": 0.2222222222222222,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-05": {
+        "ndcg": 0.42426480995637333,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.42857142857142855,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-06": {
+        "ndcg": 0.7029213114781659,
+        "precision": 0.8,
+        "recall_within_judged_pool": 0.3333333333333333,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-07": {
+        "ndcg": 0.5041157257733202,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.42857142857142855,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-08": {
+        "ndcg": 0.2509244064997311,
+        "precision": 0.4,
+        "recall_within_judged_pool": 0.2222222222222222,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-09": {
+        "ndcg": 0.5009347491766047,
+        "precision": 0.4,
+        "recall_within_judged_pool": 0.25,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-10": {
+        "ndcg": 0.342458954416167,
+        "precision": 0.6,
+        "recall_within_judged_pool": 0.3,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      },
+      "synthetic-job-11": {
+        "ndcg": 0.6608397947263838,
+        "precision": 0.8,
+        "recall_within_judged_pool": 0.4,
+        "evaluated_cutoff": 5,
+        "judged_candidates": 15
+      }
+    }
+  },
+  "limitations": [
+    "Recall is only within the supplied fully judged candidate pool, not all applicants.",
+    "No score is a probability of candidate suitability or a hiring decision.",
+    "Bootstrap assumes independent jobs; near-duplicate requisitions violate this assumption.",
+    "Reviewer agreement, subgroup effects and business impact need separate validation.",
+    "Do not repeatedly tune on this test report; preserve a new holdout for the final study."
+  ],
+  "data_kind": "synthetic",
+  "split": "test",
+  "input_sha256": {
+    "judgments": "075d2a53adeed773c16d7c813e64974dbefab62fdaa031fd036f7e2227fb40fe",
+    "runs": "39dab5dcd628372ccdc2ed64bad29e37beff8c4a86ba4b686ce6eadcaa9ef9ad"
+  }
+}

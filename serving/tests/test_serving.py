@@ -112,3 +112,16 @@ def test_metrics(client):
     assert body["screen_requests"] >= 1
     assert body["screen_mean_latency_ms"] is not None
     assert body["screen_mean_latency_ms"] > 0
+
+
+
+def test_hybrid_and_bm25_modes(client):
+    for mode in ('bm25', 'hybrid'):
+        response = client.post('/screen', json={'job_id': TEST_JOB_IDS[0], 'k': 5, 'mode': mode})
+        assert response.status_code == 200
+        assert len(response.json()['items']) == 5
+
+
+def test_untokenizable_query_and_invalid_mode(client):
+    assert client.post('/screen', json={'job_text': '!!!'}).status_code == 422
+    assert client.post('/screen', json={'job_id': 0, 'mode': 'unknown'}).status_code == 422
